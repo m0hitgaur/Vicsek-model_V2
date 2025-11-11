@@ -1,0 +1,5 @@
+data/*
+*.out
+*.exe
+*.txt
+*.dat
