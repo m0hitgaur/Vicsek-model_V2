@@ -4,151 +4,173 @@
 #include <random>
 #include <fstream>
 #include <algorithm>
+using namespace std;
+
+time_t trial_time,start_time=time(NULL) , finish_time;
+
+
 
 struct Particle {
-    double x, y, z;
-    double vx, vy, vz;
-    double ax, ay, az;
+    double x, y;
+    double vx, vy;
+    double ax, ay;
 };
 
 class MDSimulation {
 private:
-    std::vector<Particle> particles;
+    vector<Particle> particles;
+    double half_angle;
     int N;
-    double L;  // Box size
+    double Lx; 
+    double Ly; 
     double dt;
+    double v0;
     double noise;  // Noise strength
     double rc; // Cutoff radius
     double sigma, epsilon;
     double alignment_strength;
-    std::mt19937 rng;
-    std::uniform_real_distribution<double> uniform_dist;
+    mt19937 rng;
+    uniform_real_distribution<double> uniform_dist;
     
 public:
-    MDSimulation(int num_particles, double box_size, double timestep, double noise_strength, double align_str)
-        : N(num_particles), L(box_size), dt(timestep), noise(noise_strength), 
-          alignment_strength(align_str), rc(3.0), sigma(1.0), epsilon(1.0),
-          rng(std::random_device{}()), uniform_dist(-1.0, 1.0) {
-        
+    MDSimulation(int num_particles,double angle, double box_size_x,double box_size_y, double timestep, double noise_strength, double align_str)
+        : N(num_particles), half_angle(angle),Lx(box_size_x),Ly(box_size_y), dt(timestep), noise(noise_strength), alignment_strength(align_str),
+           rc(3.0), sigma(1.0), epsilon(1.0), rng(random_device{}()), uniform_dist(-1.0, 1.0) ,v0(0.01){
         particles.resize(N);
         initialize_particles();
     }
     
     void initialize_particles() {
-        double spacing = L / std::cbrt(N);
+        double spacing_x = Lx / sqrt(N);
+        double spacing_y = Ly / sqrt(N);
         int idx = 0;
         
-        for (int i = 0; i < std::cbrt(N) && idx < N; ++i) {
-            for (int j = 0; j < std::cbrt(N) && idx < N; ++j) {
-                for (int k = 0; k < std::cbrt(N) && idx < N; ++k) {
-                    particles[idx].x = i * spacing;
-                    particles[idx].y = j * spacing;
-                    particles[idx].z = k * spacing;
-                    
-                    particles[idx].vx = uniform_dist(rng);
-                    particles[idx].vy = uniform_dist(rng);
-                    particles[idx].vz = uniform_dist(rng);
-                    
-                    particles[idx].ax = 0;
-                    particles[idx].ay = 0;
-                    particles[idx].az = 0;
-                    
-                    idx++;
-                }
+        for (int i = 0; i < sqrt(N) && idx < N; ++i) {
+            for (int j = 0; j < sqrt(N) && idx < N; ++j) {
+                
+                particles[idx].x = i * spacing_x;
+                particles[idx].y = j * spacing_y;
+                
+                double theta=uniform_dist(rng);
+                
+                particles[idx].vx = v0*cos(theta);
+                particles[idx].vy = v0*sin(theta);
+                
+                particles[idx].ax = 0;
+                particles[idx].ay = 0;
+                
+                idx++;
+            
             }
         }
     }
     
     double lennard_jones_force(double r) {
         if (r > rc) return 0.0;
-        double r6 = std::pow(r, 6);
+        double r6 = pow(r, 6);
         double r12 = r6 * r6;
-        return 24.0 * epsilon * (2.0 * std::pow(sigma, 12) / r12 - std::pow(sigma, 6) / r6) / r;
+        return 24.0 * epsilon * (2.0 * pow(sigma, 12) / r12 - pow(sigma, 6) / r6) / r;
     }
     
-    double distance(const Particle& p1, const Particle& p2) {
-        double dx = p1.x - p2.x;
-        double dy = p1.y - p2.y;
-        double dz = p1.z - p2.z;
-        
+    double rij( Particle& p_i,  Particle& p_j) {
+        double dx = p_i.x - p_j.x;
+        double dy = p_i.y - p_j.y;
+
         // Periodic boundary conditions
-        if (dx > L/2) dx -= L;
-        if (dx < -L/2) dx += L;
-        if (dy > L/2) dy -= L;
-        if (dy < -L/2) dy += L;
-        if (dz > L/2) dz -= L;
-        if (dz < -L/2) dz += L;
+        if (dx > Lx/2) dx -= Lx;
+        if (dx < -Lx/2) dx += Lx;
+        if (dy > Ly/2) dy -= Ly;
+        if (dy < -Ly/2) dy += Ly;
         
-        return std::sqrt(dx*dx + dy*dy + dz*dz);
+        return sqrt(dx*dx + dy*dy );
     }
     
     void compute_forces() {
-        for (auto& p : particles) {
+        for (Particle &p : particles) {
             p.ax = 0;
             p.ay = 0;
-            p.az = 0;
-        }
+            }
         
         for (int i = 0; i < N; ++i) {
             for (int j = i + 1; j < N; ++j) {
                 double dx = particles[j].x - particles[i].x;
                 double dy = particles[j].y - particles[i].y;
-                double dz = particles[j].z - particles[i].z;
                 
-                if (dx > L/2) dx -= L;
-                if (dx < -L/2) dx += L;
-                if (dy > L/2) dy -= L;
-                if (dy < -L/2) dy += L;
-                if (dz > L/2) dz -= L;
-                if (dz < -L/2) dz += L;
-                
-                double r = std::sqrt(dx*dx + dy*dy + dz*dz);
+                if (dx > Lx/2) dx -= Lx;
+                if (dx < -Lx/2) dx += Lx;
+                if (dy > Ly/2) dy -= Ly;
+                if (dy < -Ly/2) dy += Ly;
+                double r = sqrt(dx*dx + dy*dy );
                 
                 if (r < rc && r > 1e-6) {
                     double f = lennard_jones_force(r);
                     double fx = f * dx / r;
                     double fy = f * dy / r;
-                    double fz = f * dz / r;
                     
                     particles[i].ax += fx;
                     particles[i].ay += fy;
-                    particles[i].az += fz;
                     
                     particles[j].ax -= fx;
                     particles[j].ay -= fy;
-                    particles[j].az -= fz;
+                    
                 }
             }
         }
     }
     
     void velocity_alignment() {
-        double avg_vx = 0, avg_vy = 0, avg_vz = 0;
+    
+        vector<double> avgx(N,0);
+        vector<double> avgy(N,0),newtheta(N);
+        vector<int> count(N,1); // starting from 1 as the particle itself is always counted
         
-        for (const auto& p : particles) {
-            avg_vx += p.vx;
-            avg_vy += p.vy;
-            avg_vz += p.vz;
+        for (int i=0;i<sizeof(particles);i++) {
+            double theta_i=atan2(particles[i].vy,particles[i].vx);
+            avgx[i]+=cos(theta_i);   // just so that we can include the particle itself in average
+            avgy[i]+=sin(theta_i);   // just so that we can include the particle itself in average
+            
+            for (int j = i+1; j < sizeof(particles); j++) 
+            {   
+                double theta_j=atan2(particles[j].vy,particles[j].vx);
+                double dx=particles[j].x - particles[i].x;
+                double dy=particles[j].y - particles[i].y; 
+                if(dx>Lx/2) dx=dx-Lx;
+                if(dx<-Lx/2) dx=dx+Lx ;  
+                if(dy>Ly/2) dy=dy-Ly;
+                if(dy<-Ly/2) dy=dy+Ly ;                 
+
+                double rij = sqrt(pow(dx, 2) + pow(dy, 2));
+                double innerproduct_i=( (cos(theta_i) * (dx))+( sin(theta_i) * (dy) ) )/(rij); 
+                double innerproduct_j= -1 * ( (cos(theta_j)*(dx) )+(sin(theta_j) * (dy)))/(rij); 
+                        
+                if(rij <= rc && innerproduct_i >= cos(half_angle) ) 
+                    {avgy[i]+= sin(theta_j);
+                    avgx[i]+=cos(theta_j);
+                    count[i]++;}
+                
+                if(rij <= rc && innerproduct_j >= cos(half_angle) ) 
+                    {avgy[j]+= sin(theta_i);
+                    avgx[j]+=cos(theta_i);
+                    count[j]++;}
+            }
+            
+        if(count[i]!=0)
+        {avgx[i] /= static_cast<double>(count[i]);
+        avgy[i]/=static_cast<double>(count[i]);}
+
+        newtheta[i] = atan2(avgy[i],avgx[i]) + ((double(rand()%1000)/1000)*(noise))-(noise/2);
+        if(newtheta[i]<-M_PI)newtheta[i]= fmod(newtheta[i] , M_PI)+M_PI;
+        else if(newtheta[i]>M_PI)newtheta[i]= fmod(newtheta[i] , M_PI)-M_PI;
         }
         
-        avg_vx /= N;
-        avg_vy /= N;
-        avg_vz /= N;
-        
-        for (auto& p : particles) {
-            p.vx += alignment_strength * avg_vx * dt;
-            p.vy += alignment_strength * avg_vy * dt;
-            p.vz += alignment_strength * avg_vz * dt;
-        }
+        for(int i=0;i<sizeof(particles);i++){
+            particles[i].vx += alignment_strength * v0* cos(newtheta[i]) * dt;
+            particles[i].vy += alignment_strength * v0*sin(newtheta[i]) * dt;
+            
+        }    
     }
     
-    void add_noise() {
-        for (auto& p : particles) {
-            p.vx += noise * uniform_dist(rng) * dt;
-            p.vy += noise * uniform_dist(rng) * dt;
-            p.vz += noise * uniform_dist(rng) * dt;
-        }
-    }
+
     
     void integrate() {
         compute_forces();
@@ -156,140 +178,115 @@ public:
         for (auto& p : particles) {
             p.vx += p.ax * dt;
             p.vy += p.ay * dt;
-            p.vz += p.az * dt;
             
             p.x += p.vx * dt;
             p.y += p.vy * dt;
-            p.z += p.vz * dt;
             
             // Periodic boundary conditions
-            if (p.x < 0) p.x += L;
-            if (p.x >= L) p.x -= L;
-            if (p.y < 0) p.y += L;
-            if (p.y >= L) p.y -= L;
-            if (p.z < 0) p.z += L;
-            if (p.z >= L) p.z -= L;
+            if (p.x < 0) p.x += Lx;
+            if (p.x >= Lx) p.x -= Lx;
+            if (p.y < 0) p.y += Ly;
+            if (p.y >= Ly) p.y -= Ly;
         }
-        
         velocity_alignment();
-        add_noise();
+        
     }
     
     double velocity_order_parameter() {
-        double sum_vx = 0, sum_vy = 0, sum_vz = 0;
+        double sum_vx = 0, sum_vy = 0;
         
-        for (const auto& p : particles) {
+        for ( auto& p : particles) {
             sum_vx += p.vx;
-            sum_vy += p.vy;
-            sum_vz += p.vz;
+            sum_vy += p.vy;    
         }
         
-        double magnitude = std::sqrt(sum_vx*sum_vx + sum_vy*sum_vy + sum_vz*sum_vz) / N;
-        return magnitude;
+        double va = sqrt(sum_vx*sum_vx + sum_vy*sum_vy ) /(v0* N);
+        return va;
     }
     
-    void save_snapshot(int step) {
-        std::ofstream file("snapshots_" + std::to_string(step) + ".dat");
-        for (const auto& p : particles) {
-            file << p.x << " " << p.y << " " << p.z << " "
-                 << p.vx << " " << p.vy << " " << p.vz << "\n";
+    void save_snapshot(int step,int trial) {
+        ofstream file("snapshots_" +to_string(trial)+"_" +to_string(step) + ".csv");
+        for ( auto& p : particles) {
+            file << p.x << "," << p.y << ","
+                 << p.vx << "," << p.vy << "\n";
         }
         file.close();
     }
     
-    double velocity_correlation(int distance_bin, double bin_width) {
-        double correlation = 0;
-        int count = 0;
-        
-        for (int i = 0; i < N; ++i) {
-            for (int j = i + 1; j < N; ++j) {
-                double r = distance(particles[i], particles[j]);
-                
-                if (r >= distance_bin * bin_width && r < (distance_bin + 1) * bin_width) {
-                    double v_dot = particles[i].vx * particles[j].vx +
-                                  particles[i].vy * particles[j].vy +
-                                  particles[i].vz * particles[j].vz;
-                    
-                    double v_mag_i = std::sqrt(particles[i].vx*particles[i].vx + 
-                                              particles[i].vy*particles[i].vy + 
-                                              particles[i].vz*particles[i].vz);
-                    double v_mag_j = std::sqrt(particles[j].vx*particles[j].vx + 
-                                              particles[j].vy*particles[j].vy + 
-                                              particles[j].vz*particles[j].vz);
-                    
-                    if (v_mag_i > 1e-6 && v_mag_j > 1e-6) {
-                        correlation += v_dot / (v_mag_i * v_mag_j);
-                        count++;
-                    }
-                }
-            }
-        }
-        
-        return count > 0 ? correlation / count : 0.0;
-    }
     
-    void run_simulation(int tmax) {
-        std::vector<int> times;
-        std::ofstream order_file("order_parameter.dat");
-        
-        for (int t = 0; t < tmax; ++t) {
-            int ti = 0;
+    void run_simulation(int tmax,int trialstart,int numberoftrials) {
+
+        vector<int> times;
+        for (int t = 0; t < tmax; t++) {
+            int ti ;
             if (t < 10) ti = 0;
             else if (t < 100) ti = 10;
             else if (t < 500) ti = 100;
             else if (t < 1000) ti = 500;
-            else ti = 1000;
             
-            if (ti > 0 && t % ti == 0) {
-                times.push_back(t);
-            }
-            
-            integrate();
-            
-            double phi = velocity_order_parameter();
-            order_file << t << " " << phi << "\n";
-            
-            if (t % 100 == 0) {
-                std::cout << "Step " << t << " Order Parameter: " << phi << std::endl;
-                save_snapshot(t);
-            }
-        }
+            if (t % ti == 0)times.push_back(t); 
+        }    
         
+        vector<vector<double>> orderpara(numberoftrials-trialstart, vector <double>(sizeof(times),0) );
+
+        for(int trial=trialstart;trial<numberoftrials;trial++)
+            {   
+                vector<int> times;
+                vector<double> order;
+                trial_time=time(NULL);
+                cout<<"\n"<<"Trial number : "<<trial<< " Out of "<<numberoftrials<<"    ";
+            
+        
+            for (int t = 0; t < tmax; t++) {
+                int ti ;
+                if (t < 10) ti = 0;
+                else if (t < 100) ti = 10;
+                else if (t < 500) ti = 100;
+                else if (t < 1000) ti = 500;
+                
+                integrate();
+                
+                if (t % ti == 0){
+                    order.push_back(velocity_order_parameter());    
+                    save_snapshot(t,trial);
+                } 
+                
+                if (t % 100 == 0) cout  << t<<">>";
+            }
+            
+            cout<<tmax<<"\n";    
+            cout<<"Time to calculate trial = "  <<time(NULL)-trial_time<<" seconds  for   Angle : "+to_string(half_angle*180/M_PI)+" | Noise : "+to_string(noise)+" | Density : "+to_string(N/(Lx*Ly))+" | N = "+to_string(N)<<endl;  
+         
+        }    
+
+
+        ofstream order_file("data/order_parameter.csv");
+        string a="";
+        for (int i=trialstart;i<numberoftrials;i++)a+=to_string(i)+",";      
+        order_file<<a<<",t\n";
+        for(auto o:orderpara)order_file<<o<<",";
+        order_file<<","<<times<<"\n";
         order_file.close();
         
-        // Calculate correlation functions
-        std::ofstream vel_corr_file("velocity_correlation.dat");
-        std::ofstream conn_corr_file("connected_correlation.dat");
-        
-        double bin_width = 0.5;
-        int max_bins = static_cast<int>(L / (2 * bin_width));
-        
-        for (int b = 0; b < max_bins; ++b) {
-            double v_corr = velocity_correlation(b, bin_width);
-            double r_center = (b + 0.5) * bin_width;
-            vel_corr_file << r_center << " " << v_corr << "\n";
-            
-            // Connected correlation (simplified: same as velocity correlation here)
-            conn_corr_file << r_center << " " << v_corr << "\n";
-        }
-        
-        vel_corr_file.close();
-        conn_corr_file.close();
-        
-        std::cout << "\nSimulation complete. Recorded " << times.size() << " snapshots." << std::endl;
+
+        cout<<"\n"<<"Total time elapsed : "<< finish_time - start_time <<" seconds ";
+        cout << "\nSimulation complete. Recorded " << times.size() << " snapshots." << endl;
     }
 };
 
 int main() {
     int N = 100;        // Number of particles
-    double L = 20.0;    // Box size
+    double Lx = 20.0;    // Box size
+    double Ly = 20.0;    // Box size
+    double half_angle=M_PI;
     double dt = 0.01;   // Timestep
     double noise = 0.5; // Noise strength
     double align_str = 0.1;  // Alignment strength
     int tmax = 2000;    // Maximum time
-    
-    MDSimulation sim(N, L, dt, noise, align_str);
-    sim.run_simulation(tmax);
+    int numberoftrials=1;
+    int trialstart=0;
+    MDSimulation sim(N, half_angle,Lx,Ly, dt, noise, align_str);
+    sim.run_simulation(tmax,trialstart,numberoftrials);
     
     return 0;
 }
