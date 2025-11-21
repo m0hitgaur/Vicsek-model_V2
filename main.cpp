@@ -8,8 +8,16 @@ using namespace std;
 
 time_t trial_time,start_time=time(NULL) , finish_time;
 
-
-
+bool create_directory(const string& path) {
+    try {
+        fs::create_directories(path);
+        return fs::is_directory(path);
+    } 
+    catch (const fs::filesystem_error& e) {
+        std::cerr << "Error creating directory '" << path << "': " << e.what() << '\n';
+        return false;
+    }
+}
 struct Particle {
     double x, y;
     double vx, vy;
