@@ -24,6 +24,8 @@ struct Particle {
     double x, y;
     double vx, vy;
     double ax, ay;
+    double x_new,y_new;
+    double vx_new,vy_new;
 };
 
 class Simulation {
@@ -47,7 +49,7 @@ private:
 public:
     Simulation(int num_particles,double angle,double box_size_x,double box_size_y,int trial_, double velo_mag,double timestep, double noise_strength,string folderpath)
         : N(num_particles), half_angle(angle),Lx(box_size_x),Ly(box_size_y), dt(timestep), noise(noise_strength),
-           rc(3*sigma), k(1.0),sigma(1.0), uniform_dist(-1.0, 1.0),uniform_dist_N(0, N),gen(12345) ,v0(velo_mag),folder_path(folderpath),trial(trial_){
+           rc(3*sigma), k(1.0),sigma(1.0), uniform_dist(-1.0, 1.0),uniform_dist_N(0, N),gen(12345),v0(velo_mag),folder_path(folderpath),trial(trial_){
         particles.resize(N);
         initialize_particles();
         
@@ -59,6 +61,7 @@ public:
         order_file.close();
 
     }
+
     vector<double> get_order_data(){return order;}
     vector<int> get_time_data(){return times;}
 
@@ -72,11 +75,15 @@ public:
 
                 particles[id].x = j ;
                 particles[id].y = k;
+                particles[id].x_new = j ;
+                particles[id].y_new = k;
+
                 double theta=M_PI*uniform_dist(gen);
     
                 particles[id].vx = v0*cos(theta);
                 particles[id].vy = v0*sin(theta);
-                
+                particles[id].vx_new = v0*cos(theta);
+                particles[id].vy_new = v0*sin(theta);
                 particles[id].ax = 0;
                 particles[id].ay = 0;
                 id++;                
@@ -87,8 +94,7 @@ public:
         
     
         //for(int t=0;t<100;t++)position_update();
-    }       
-    
+    }          
     double dot_product(double theta,double dx,double dy,double rij){
         return ( (cos(theta) * (dx))+( sin(theta) * (dy) ) )/(rij);
     }
@@ -127,11 +133,8 @@ public:
     double rij( Particle& p_i,  Particle& p_j) {
         double dx = p_i.x - p_j.x;
         double dy = p_i.y - p_j.y;
-
-        if (dx > Lx/2) dx -= Lx;
-        if (dx < -Lx/2) dx += Lx;
-        if (dy > Ly/2) dy -= Ly;
-        if (dy < -Ly/2) dy += Ly;
+        dx=minimum_image(dx,Lx);
+        dy=minimum_image(dx,Ly);
         double r=sqrt(dx*dx + dy*dy);
         if (r < 1e-3) r = 1e-3;
         return r;
@@ -146,11 +149,8 @@ public:
             for (int j = i + 1; j < N; j++) {
                 double dx = particles[j].x - particles[i].x;
                 double dy = particles[j].y - particles[i].y;
-                
-                if (dx > Lx/2) dx -= Lx;
-                if (dx < -Lx/2) dx += Lx;
-                if (dy > Ly/2) dy -= Ly;
-                if (dy < -Ly/2) dy += Ly;
+                dx=minimum_image(dx,Lx);
+                dy=minimum_image(dy,Ly);
                 double r = sqrt(dx*dx + dy*dy );
                 
                 if (r < rc && r > 1e-6) {
@@ -224,8 +224,8 @@ public:
         }
     }
     void integrate() {
-        position_update();
-        velocity_alignment();   
+        velocity_alignment(); 
+        position_update(); 
     } 
     double velocity_order_parameter() {
         double sum_vx = 0, sum_vy = 0;
@@ -247,6 +247,7 @@ public:
         }
         file.close();
     }   
+
     void run_simulation(int tmax,int trialstart,int numberoftrials,vector<bool>time_record) {
         ofstream f(folder_path+"parameters.csv");
         string head="N,Lx,Ly,alpha,v0,dt,eta,maxiter,numberoftrials\n";
@@ -267,6 +268,7 @@ public:
         save_order_data();
         cout << "\nSimulation complete. Recorded " << times.size() << " snapshots." << endl;
     }
+
 };
 
 
