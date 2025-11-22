@@ -39,41 +39,40 @@ private:
     double noise;  // Noise strength
     double rc; // Cutoff radius
     double sigma,k;
-    double alignment_strength;
     mt19937 gen;
-    uniform_real_distribution<double> uniform_dist;
+    uniform_real_distribution<double> uniform_dist,uniform_dist_N;
     
 public:
-    Simulation(int num_particles,double angle,double box_size_x,double box_size_y, double velo_mag,double timestep, double noise_strength, double align_str)
-        : N(num_particles), half_angle(angle),Lx(box_size_x),Ly(box_size_y), dt(timestep), noise(noise_strength), alignment_strength(align_str),
-           rc(3*sigma), k(1.0),sigma(1.0), uniform_dist(-1.0, 1.0),gen(12345) ,v0(velo_mag){
+    Simulation(int num_particles,double angle,double box_size_x,double box_size_y, double velo_mag,double timestep, double noise_strength)
+        : N(num_particles), half_angle(angle),Lx(box_size_x),Ly(box_size_y), dt(timestep), noise(noise_strength),
+           rc(3*sigma), k(1.0),sigma(1.0), uniform_dist(-1.0, 1.0),uniform_dist_N(0, N),gen(12345) ,v0(velo_mag){
         particles.resize(N);
         initialize_particles();
     }
     
     void initialize_particles() {
-        double spacing_x = Lx / sqrt(N);
-        double spacing_y = Ly / sqrt(N);
-        int idx = 0;
-        
-        for (int i = 0; i < sqrt(N) && idx < N; i++) {
-            for (int j = 0; j < sqrt(N) && idx < N; j++) {
-                
-                particles[idx].x = i * spacing_x;
-                particles[idx].y = j * spacing_y;
-                
+        double rho = N/(Lx*Ly);
+        if(rho>1){cout<<"Particles Intialize Failure ";}
+        int i=0;    
+        for(int j=0;j<Lx &&i<N;j++){
+            for(int k=0;k<Ly&&i<N;k++){
+                particles[i].x = j ;
+                particles[i].y = k;
                 double theta=M_PI*uniform_dist(gen);
+    
+                particles[i].vx = v0*cos(theta);
+                particles[i].vy = v0*sin(theta);
                 
-                particles[idx].vx = v0*cos(theta);
-                particles[idx].vy = v0*sin(theta);
-                
-                particles[idx].ax = 0;
-                particles[idx].ay = 0;
-                
-                idx++;
-            
-            }
+                particles[i].ax = 0;
+                particles[i].ay = 0;
+                i++;                
+            } 
         }
+
+            
+        
+    
+        for(int t=0;t<100;t++)position_update();
     }       
     
     void pbc_posi(Particle & p){
@@ -195,8 +194,8 @@ public:
         }
         
         for(int i=0;i<particles.size();i++){
-            particles[i].vx += alignment_strength * v0* cos(newtheta[i]) * dt;
-            particles[i].vy += alignment_strength * v0*sin(newtheta[i]) * dt;
+            particles[i].vx += v0* cos(newtheta[i]) * dt;
+            particles[i].vy += v0*sin(newtheta[i]) * dt;
             
         }    
     }
@@ -232,7 +231,8 @@ public:
     }
     
     void save_snapshot(int step,int trial) {
-        ofstream file("data/config_data/config_" +to_string(trial)+"_" +to_string(step) + ".csv");
+        ofstream file("data/config_data/trial_"+to_string(trial)+"/config_" +to_string(step) + ".csv");
+        file<<"x,y,vx,vy\n";
         for ( auto& p : particles) {
             file << p.x << "," << p.y << ","
                  << p.vx << "," << p.vy << "\n";
@@ -245,31 +245,36 @@ public:
         vector<int> times;
         for (int t = 0; t < tmax; t++) {
             bool should_record = false;
-                if (t < 10) should_record = true;                    
-                if (t<500 && t >= 100 && t % 10 == 0) should_record = true;   
-                if (t >= 500&& t<1000 && t % 100 == 0) should_record = true;  
-                if (t>=1000 && t % 500 == 0) should_record = true;                         
+                if (t <= 10) should_record = true;
+                if(t>=10 && t<100&& t%10==0) should_record = true;                   
+                if (t<1000 && t >= 100 && t % 50 == 0) should_record = true;   
+                if (t>=1000 && t % 100 == 0) should_record = true;                        
             if (should_record) times.push_back(t);
                 }    
        
         vector<vector<double>> orderpara(numberoftrials-trialstart, vector <double>(times.size(),0) );
- 
+        
+
+        ofstream f("data/parameters.csv");
+        string head="N,Lx,Ly,alpha,v0,dt,eta,maxiter,numberoftrials\n";
+        f<< head;
+        f<<N<<","<<Lx<<","<<Ly<<","<<half_angle<<","<<v0<<","<<dt<<","<<noise<<","<<tmax<<","<<numberoftrials; 
+        
         for(int trial=trialstart;trial<numberoftrials;trial++){
-                //ofstream f("/data/trial/")
-                gen.seed(12345 + 10 * trial);
-                string  path= "data/config_data/trial_"+ to_string(trial)+"/";
-                create_directory( path);
-                vector<double> order;
-                trial_time=time(NULL);
-                cout<<"\n"<<"Trial number : "<<trial<< " Out of "<<numberoftrials<<"    ";
+            string  path= "data/config_data/trial_"+ to_string(trial)+"/";
+            create_directory(path);
+            gen.seed(12345 + 10 * trial);
+            vector<double> order;
+            trial_time=time(NULL);
+            cout<<"\n"<<"Trial number : "<<trial<< " Out of "<<numberoftrials<<"    ";
             
         
             for (int t = 0; t < tmax; t++) {
                 bool should_record = false;
-                if (t < 10) should_record = true;                    
-                if (t<500 && t >= 100 && t % 10 == 0) should_record = true;   
-                if (t >= 500&& t<1000 && t % 100 == 0) should_record = true;  
-                if (t>=1000 && t % 500 == 0) should_record = true;                        
+                if (t <= 10) should_record = true;
+                if(t>=10 && t<100&& t%10==0) should_record = true;                   
+                if (t<1000 && t >= 100 && t % 50 == 0) should_record = true;   
+                if (t>=1000 && t % 100 == 0) should_record = true;                        
                     
                 
                 integrate();
@@ -313,18 +318,17 @@ public:
 };
 
 int main() {
-    int N = 300;        // Number of particles
-    double Lx = 20.0;    // Box size
-    double Ly = 20.0;    // Box size
+    int N = 100;        // Number of particles
+    double Lx = 15.0;    // Box size
+    double Ly = 15.0;    // Box size
     double half_angle=M_PI;
     double v0=0.01;
     double dt = 0.01;   // Timestep
     double noise = 0.05; // Noise strength
-    double align_str = 1;  // Alignment strength
-    int tmax = 600;    // Maximum time
+    int tmax = 2000;    // Maximum time
     int numberoftrials=1;
     int trialstart=0;
-    Simulation sim(N, half_angle,Lx,Ly, v0,dt, noise, align_str);
+    Simulation sim(N, half_angle,Lx,Ly, v0,dt, noise);
     string path="data/order_data";
     create_directory(path);
     sim.run_simulation(tmax,trialstart,numberoftrials);
