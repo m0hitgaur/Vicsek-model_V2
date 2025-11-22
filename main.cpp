@@ -43,17 +43,17 @@ private:
     vector<double> order;
     mt19937 gen;
     uniform_real_distribution<double> uniform_dist,uniform_dist_N;
-    
+    string folder_path;
 public:
-    Simulation(int num_particles,double angle,double box_size_x,double box_size_y,int trial_, double velo_mag,double timestep, double noise_strength)
+    Simulation(int num_particles,double angle,double box_size_x,double box_size_y,int trial_, double velo_mag,double timestep, double noise_strength,string folderpath)
         : N(num_particles), half_angle(angle),Lx(box_size_x),Ly(box_size_y), dt(timestep), noise(noise_strength),
-           rc(3*sigma), k(1.0),sigma(1.0), uniform_dist(-1.0, 1.0),uniform_dist_N(0, N),gen(12345) ,v0(velo_mag),trial(trial_){
+           rc(3*sigma), k(1.0),sigma(1.0), uniform_dist(-1.0, 1.0),uniform_dist_N(0, N),gen(12345) ,v0(velo_mag),folder_path(folderpath),trial(trial_){
         particles.resize(N);
         initialize_particles();
         
     }
     void save_order_data(){
-        ofstream order_file("data/order_data/order_parameter_"+to_string(trial)+"_.csv");
+        ofstream order_file(folder_path+"order_data/order_parameter_"+to_string(trial)+"_.csv");
         order_file<<"va,t\n";
         for (int i=0;i<order.size();i++)order_file<<order[i]<<","<<times[i]<<"\n";      
         order_file.close();
@@ -239,7 +239,7 @@ public:
         return va;
     }   
     void save_snapshot(int step,int trial) {
-        ofstream file("data/config_data/trial_"+to_string(trial)+"/config_" +to_string(step) + ".csv");
+        ofstream file(folder_path+"config_data/trial_"+to_string(trial)+"/config_" +to_string(step) + ".csv");
         file<<"x,y,vx,vy\n";
         for ( auto& p : particles) {
             file << p.x << "," << p.y << ","
@@ -248,7 +248,7 @@ public:
         file.close();
     }   
     void run_simulation(int tmax,int trialstart,int numberoftrials,vector<bool>time_record) {
-        ofstream f("data/parameters.csv");
+        ofstream f(folder_path+"parameters.csv");
         string head="N,Lx,Ly,alpha,v0,dt,eta,maxiter,numberoftrials\n";
         f<< head;
         f<<N<<","<<Lx<<","<<Ly<<","<<half_angle<<","<<v0<<","<<dt<<","<<noise<<","<<tmax<<","<<numberoftrials; 
@@ -271,8 +271,8 @@ public:
 
 
 
-void save_order(vector<vector<double>>orderpara,vector<int>times,int trialstart){        
-    ofstream order_file("data/order_parameter.csv");
+void save_order(vector<vector<double>>orderpara,vector<int>times,int trialstart,string folder_path){        
+    ofstream order_file(folder_path+"order_parameter.csv");
     string a="";
     for (int i=0;i<orderpara.size();i++)a+="trial_"+to_string(i+trialstart)+",";      
     order_file<<a<<"t\n";
@@ -309,13 +309,14 @@ int main() {
     
     vector <vector<double>> order_data(numberoftrials-trialstart);
     vector<int> times;
+    string folder_path;
     for(int trial=trialstart;trial<numberoftrials;trial++){
-        create_directory("data/config_data/trial_"+ to_string(trial)+"/");
-        
+        folder_path="data/";
+        create_directory(folder_path+"config_data/trial_"+ to_string(trial)+"/");
         trial_time=time(NULL);
-        cout<<"\n"<<"Trial number : "<<trial<< " Out of "<<numberoftrials<< " | Angle : "+to_string(half_angle*180/M_PI)+" | Noise : "+to_string(noise)+" | Density : "+to_string(N/(Lx*Ly))+" | N = "+to_string(N)<<endl ;
+        cout<<"\n"<<"Trial number : "<<trial<< " Out of "<<numberoftrials<< " | Angle : "+to_string(half_angle*180/M_PI)+" | Noise : "+to_string(noise)+" | Density : "+to_string(N/(Lx*Ly))+" | N = "+to_string(N)<<" | "<<endl ;
         
-        Simulation sim(N, half_angle,Lx,Ly,trial,v0,dt, noise);
+        Simulation sim(N, half_angle,Lx,Ly,trial,v0,dt, noise,folder_path);
         sim.run_simulation(tmax,trialstart,numberoftrials,time_record);
         
         cout<<"Time to calculate trial = "  <<time(NULL)-trial_time<<" seconds ";  
@@ -324,7 +325,7 @@ int main() {
         if(trial==numberoftrials-1)times=sim.get_time_data();
     }   
     
-    save_order(order_data,times,trialstart); 
+    save_order(order_data,times,trialstart,folder_path); 
     
     cout<<"\n"<<"Total time elapsed : "<< time(NULL) - start_time <<" seconds ";
     return 0;
