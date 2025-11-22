@@ -48,7 +48,7 @@ def plot_single_frame():
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_aspect('equal')
     ax.set_xlim(0, params['Lx'])
-    ax.set_ylim(0, params['Ly'])·
+    ax.set_ylim(0, params['Ly'])
     
     ax.scatter(px, py,s=size)
     ax.set_title(f"N={params['N']} | η={params['noise']} | α={params['alpha']}° | t={time_step}")

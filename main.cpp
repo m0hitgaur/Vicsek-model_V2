@@ -74,15 +74,21 @@ public:
     
         for(int t=0;t<100;t++)position_update();
     }       
-    
+    double dot_product(double theta,double dx,double dy,double rij){
+        return ( (cos(theta) * (dx))+( sin(theta) * (dy) ) )/(rij);
+    }
     void pbc_posi(Particle & p){
         // Periodic boundary conditions
-        if (p.x < 0) p.x += Lx;
-        if (p.x >= Lx) p.x -= Lx;
-        if (p.y < 0) p.y += Ly;
-        if (p.y >= Ly) p.y -= Ly;
+        if (p.x < 0) p.x = fmod(p.x,Lx) +Lx;
+        if (p.x > Lx) p.x = fmod(p.x,Lx);
+        if (p.y < 0) p.y = fmod(p.y,Ly) +Ly;
+        if (p.y > Ly) p.y = fmod(p.y,Ly);
     }
-
+    double minimum_image(double dx,double Lx){
+        if(dx>Lx/2) dx=dx-Lx;
+        if(dx<-Lx/2) dx=dx+Lx ;  
+        return dx;
+    }
     void pbc_velo(Particle & p){
         double theta=atan2(p.vy,p.vx);
         if(theta<-M_PI)theta= fmod(theta , M_PI)+M_PI;
@@ -163,19 +169,13 @@ public:
             for (int j = i+1; j < particles.size(); j++) 
             {   
                 double theta_j=atan2(particles[j].vy,particles[j].vx);
-                double dx=particles[j].x - particles[i].x;
-                double dy=particles[j].y - particles[i].y; 
-                if(dx>Lx/2) dx=dx-Lx;
-                if(dx<-Lx/2) dx=dx+Lx ;  
-                if(dy>Ly/2) dy=dy-Ly;
-                if(dy<-Ly/2) dy=dy+Ly ;                 
-
+                double dx=minimum_image(particles[j].x - particles[i].x,Lx);
+                double dy=minimum_image(particles[j].y - particles[i].y,Ly);                 
                 double rij = sqrt(pow(dx, 2) + pow(dy, 2));
-                if (rij < 1e-4)rij=1e-4;
-                double innerproduct_i=( (cos(theta_i) * (dx))+( sin(theta_i) * (dy) ) )/(rij); 
-                double innerproduct_j= -1 * ( (cos(theta_j)*(dx) )+(sin(theta_j) * (dy)))/(rij); 
+                double innerproduct_i=  dot_product(theta_i,dx,dy,rij); 
+                double innerproduct_j= -1 * dot_product(theta_j,dx,dy,rij); 
                         
-                if(rij <= rc && innerproduct_i >= cos(half_angle) )      //////////////////////////// r_c or r_c/2??
+                if(rij <= rc && innerproduct_i >= cos(half_angle) )      
                     {avgy[i]+= sin(theta_j);
                     avgx[i]+=cos(theta_j);
                     count[i]++;}
@@ -194,8 +194,8 @@ public:
         }
         
         for(int i=0;i<particles.size();i++){
-            particles[i].vx += v0* cos(newtheta[i]) * dt;
-            particles[i].vy += v0*sin(newtheta[i]) * dt;
+            particles[i].vx = v0* cos(newtheta[i]) ;
+            particles[i].vy = v0*sin(newtheta[i]) ;
             
         }    
     }
