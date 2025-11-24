@@ -3,13 +3,15 @@ import numpy as np
 import pandas as pd
 import os
 import matplotlib.animation as animation
-
+from matplotlib.patches import Circle
+from matplotlib.collections import PatchCollection
 def get_recording_times(maxiter):
     """Generate list of time steps that were recorded"""
     times = []
     for i in range(maxiter):
         if(i<10):times.append(i)
-        if( 100<=i and i<500 and i % 10 == 0):times.append(i)
+        if( 10<=i and i<100 and i % 10 == 0):times.append(i)
+        if(i<1000 and i>100 and i % 50 == 0):times.append(i) 
         if(i>1000 and i % 100 == 0):times.append(i)
 
     return times
@@ -26,7 +28,7 @@ def load_simulation_parameters():
         'noise': float(df["eta"].values),
         'maxiter': int(df["maxiter"].values)
     }
-size=2
+size=100
 def plot_single_frame():
     """Plot a single time frame"""
     time_step = input("Time: ")
@@ -57,7 +59,7 @@ def plot_single_frame():
 
 def plot_animation():
     """Create animation over time"""
-    trial = input("Trial: ")
+    trial = 0#input("Trial: ")
     
     params = load_simulation_parameters()
     
@@ -70,27 +72,38 @@ def plot_animation():
     ax.set_ylim(0, params['Ly'])
     
     # Initialize empty quiver
-    quiver = ax.scatter([], [])
-    
+    quiver = ax.quiver([], [])
+    collection = PatchCollection([], alpha=0.6, facecolor='steelblue', 
+                                 edgecolor='black', linewidth=0.5)
+    ax.add_collection(collection)
+
     def update(frame_idx):
         nonlocal quiver
+        quiver.remove()
         t = times[frame_idx]
         # Load data
         data_path = os.path.join(os.getcwd(), 'data', 'config_data',f'trial_{trial}', f'config_{t}.csv')
-        
         df = pd.read_csv(data_path)
-        
         # Extract arrays
         px = df["x"].values
         py = df["y"].values
         vx = df["vx"].values
         vy = df["vy"].values
+        sigma=1
+        
+        circles=[]
+        for i in range(params["N"]):
+            circles.append(Circle((px[i],py[i]), radius=sigma) )  
+        # Add circles to collection for better performance
+        #collection = PatchCollection(circles, alpha=0.6, facecolor='steelblue', edgecolor='black',linewidth=0.5)
+        collection.set_paths(circles)
+        
         
         # Update quiver
-        quiver.remove()
-        quiver = ax.scatter(px, py,s=size)
+        scale = 0.5 / sigma  # Scale arrows for visibility
+        quiver=ax.quiver(px, py, vx, vy,scale=scale, width=0.003, color='red', alpha=0.7)
         ax.set_title(f"N={params['N']} | η={params['noise']} | α={params['alpha']}° | t={t}")
-        
+            
         return quiver,
     
     # Create animation
@@ -99,7 +112,7 @@ def plot_animation():
 
 # Main loop
 while True:
-    check = input("Single frame(s/S) or animation(a/A): ").strip().lower()
+    check = "a" #input("Single frame(s/S) or animation(a/A): ").strip().lower()
     
     if check == 'a':
         plot_animation()
