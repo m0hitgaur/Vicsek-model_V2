@@ -18,8 +18,11 @@ import argparse
 # ---------- utilities -------------------------------------------------------
 def minimum_image(dx, dy, Lx, Ly):
     """Apply minimum-image convention to separation vector."""
-    dx = dx - Lx * np.round(dx / Lx)
-    dy = dy - Ly * np.round(dy / Ly)
+    if(dx<-Lx/2):dx=dx + Lx
+    if(dx>Lx/2):dx=dx - Lx 
+    if(dx<-Ly/2):dy=dy + Ly
+    if(dx>Ly/2):dy=dy - Ly
+
     return dx, dy
 
 def all_distances_one_frame(df, Lx, Ly):
@@ -84,7 +87,7 @@ if __name__ == "__main__":
     plt.figure(figsize=(6, 4))
     plt.stairs(counts, edges, fill=True, alpha=0.7, color="steelblue", edgecolor="black")
     plt.xlabel("r_ij")
-    plt.ylabel("P(r_ij)")
+    plt.ylabel("N(r_ij)")
     plt.title(f"Distribution of inter-particle distances  (trial {args.trial})")
     plt.tight_layout()
     plt.savefig(args.png, dpi=200)

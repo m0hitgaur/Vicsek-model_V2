@@ -10,7 +10,7 @@ using namespace std;
 namespace fs = filesystem;
 
 
-bool create_directory(const string& path) {
+bool create_directory(string& path) {
     try {
         fs::create_directories(path);
         return fs::is_directory(path);
@@ -26,6 +26,7 @@ struct Particle {
     double ax, ay;
     double x_new,y_new;
     double vx_new,vy_new;
+    vector <int> neighbours;
 };
 
 class Simulation {
@@ -64,6 +65,45 @@ public:
 
     vector<double> get_order_data(){return order;}
     vector<int> get_time_data(){return times;}
+    void update_neigbours(){
+        for(Particle &p:particles){
+            p.neighbours.clear();
+            for(int i=0;i<N;i++){
+                double r=rij(p,particles[i]);
+                if(r<=2*rc && r>1e-4){
+                    p.neighbours.push_back(i);
+                }
+            }
+        }
+    }
+    void initialize_particles_old() {
+        gen.seed(12345 + 10 * trial);
+        double rho = N/(Lx*Ly);
+        if(rho>=1){cout<<"Particles Intialize Failure ";}
+        int i=0;
+        for(int j=0;j<static_cast<int>(Lx) &&i<N;j++){
+            for(int k=0;k<static_cast<int>(Ly)&&i<N;k++){
+            
+                particles[i].x = j ;
+                particles[i].y = k;
+                particles[i].x_new = j ;
+                particles[i].y_new = k;                    
+                
+                double theta=M_PI*uniform_dist(gen);
+    
+                particles[i].vx = v0*cos(theta);
+                particles[i].vy = v0*sin(theta);
+                particles[i].vx_new = v0*cos(theta);
+                particles[i].vy_new = v0*sin(theta);
+                particles[i].ax = 0;
+                particles[i].ay = 0;
+                i++;                
+            } 
+        }    
+        update_neigbours();
+        for(int t=0;t<100;t++){velocity_update();position_update();EndTimeStep();}
+        update_neigbours();
+    }          
 
     void initialize_particles() {
         gen.seed(12345 + 10 * trial);
@@ -72,34 +112,35 @@ public:
         int grid_size = static_cast<int>(ceil(sqrt(N)));
         double spacing_x = Lx / grid_size;
         double spacing_y = Ly / grid_size;
-        int id=0;
-        for(int j=0;j<static_cast<int>(grid_size) &&id<N;j++){
-            for(int k=0;k<static_cast<int>(grid_size)&&id<N;k++){
+        int i=0;
+        for(int j=0;j<static_cast<int>(grid_size) &&i<N;j++){
+            for(int k=0;k<static_cast<int>(grid_size)&&i<N;k++){
 
-                particles[id].x = (j + 0.5) * spacing_x;
-                particles[id].y = (k + 0.5) * spacing_y;
-                particles[id].x_new = particles[id].x;
-                particles[id].y_new = particles[id].y;
+                particles[i].x = (j + 0.5) * spacing_x;
+                particles[i].y = (k + 0.5) * spacing_y;
+                particles[i].x_new = particles[i].x;
+                particles[i].y_new = particles[i].y;
                 
                 double theta=M_PI*uniform_dist(gen);
-                particles[id].vx = v0*cos(theta);
-                particles[id].vy = v0*sin(theta);
-                particles[id].vx_new = v0*cos(theta);
-                particles[id].vy_new = v0*sin(theta);
+                particles[i].vx = v0*cos(theta);
+                particles[i].vy = v0*sin(theta);
+                particles[i].vx_new = v0*cos(theta);
+                particles[i].vy_new = v0*sin(theta);
                 
-                particles[id].ax = 0;
-                particles[id].ay = 0;
+                particles[i].ax = 0;
+                particles[i].ay = 0;
                 
-                id++;                
+                i++;                
             } 
         }
-
-        for(int t=0;t<100;t++){position_update();EndTimeStep();}
+        update_neigbours();
+        for(int t=0;t<100;t++){velocity_update();position_update();EndTimeStep();}
+        update_neigbours();
     }          
     double dot_product(double theta,double dx,double dy,double rij){
         return ( (cos(theta) * (dx))+( sin(theta) * (dy) ) )/(rij);
     }
-    void pbc_posi(Particle & p){
+    void pbc_position(Particle & p){
         // Periodic boundary conditions
         if (p.x < 0) p.x = fmod(p.x,Lx) +Lx;
         if (p.x > Lx) p.x = fmod(p.x,Lx);
@@ -127,9 +168,8 @@ public:
         return 24.0 * (2.0 * sr12 - sr6) / r;
     }
     double inter_particle_repulsive_force(double r) {
-        //const double rmin = 1e-3;
-        if (r > 2*sigma ) return 0.0;
-        else return k*(r-2*sigma);
+        if (r <= 2*sigma ) return k*(2*sigma-r);
+        else return 0;
     }   
     double rij( Particle& p_i,  Particle& p_j) {
         double dx = p_i.x - p_j.x;
@@ -140,37 +180,36 @@ public:
         if (r < 1e-3) r = 1e-3;
         return r;
     }
+    
     void compute_forces() {
         for (Particle &p : particles) {
             p.ax = 0;
-            p.ay = 0;
+            p.ay  = 0;
             }
         
-        for (int i = 0; i < N; i++) {
-            for (int j = i + 1; j < N; j++) {
-                double dx = particles[j].x - particles[i].x;
-                double dy = particles[j].y - particles[i].y;
+        for (Particle &p_i:particles) {
+            for (int j:p_i.neighbours) {
+                double dx = particles[j].x - p_i.x;
+                double dy = particles[j].y - p_i.y;
                 dx=minimum_image(dx,Lx);
                 dy=minimum_image(dy,Ly);
-                double r = sqrt(dx*dx + dy*dy );
-                     
-                if (r < rc && r > 1e-6) {
-                    double f = inter_particle_repulsive_force(r);
-                    double fx = f * dx / r;
-                    double fy = f * dy / r;
-                    
-                    particles[i].ax += fx;
-                    particles[i].ay += fy;
-                    
-                    particles[j].ax -= fx;
-                    particles[j].ay -= fy;
-                    
-                }
+                double r = sqrt(dx*dx + dy*dy );     
+            
+                double f = inter_particle_repulsive_force(r);
+                double fx = f * (-dx / r);
+                double fy = f * (-dy / r);
+                
+                p_i.ax += fx;
+                p_i.ay += fy;
+                
+                particles[j].ax -= fx;
+                particles[j].ay -= fy;
+                
+                
             }
         }
     }   
-    void velocity_alignment() {
-    
+
     void velocity_alignment() {    
         vector<double> avgx(N,0);
         vector<double> avgy(N,0),newtheta(N);
@@ -181,7 +220,7 @@ public:
             avgx[i]+=cos(theta_i);   // just so that we can include the particle itself in average
             avgy[i]+=sin(theta_i);   // just so that we can include the particle itself in average
             
-            for (int j = i+1; j < particles.size(); j++) 
+            for (int j:particles[i].neighbours) 
             {   
                 double theta_j=atan2(particles[j].vy,particles[j].vx);
                 double dx=minimum_image(particles[j].x - particles[i].x,Lx);
@@ -190,12 +229,12 @@ public:
                 double innerproduct_i=  dot_product(theta_i,dx,dy,rij); 
                 double innerproduct_j=  dot_product(theta_j,-dx,-dy,rij); 
                         
-                if(rij <= rc && innerproduct_i >= cos(half_angle) )      
+                if( innerproduct_i >= cos(half_angle) )      
                     {avgy[i]+= sin(theta_j);
                     avgx[i]+=cos(theta_j);
                     count[i]++;}
                 
-                if(rij <= rc && innerproduct_j >= cos(half_angle) ) 
+                if( innerproduct_j >= cos(half_angle) ) 
                     {avgy[j]+= sin(theta_i);
                     avgx[j]+=cos(theta_i);
                     count[j]++;}
@@ -214,15 +253,18 @@ public:
             
         }    
     }
-    void position_update(){
-        compute_forces();
-        for (auto& p : particles) {    
-            p.vx_new += p.ax*dt;
-            p.vy_new += p.ay*dt ;
+    void velocity_update(){
+        for (Particle & p : particles) {    
+            p.vx_new += p.ax;
+            p.vy_new += p.ay ;
             pbc_velo(p);
+        }
+    }
+    void position_update(){
+        for (Particle & p : particles) {    
             p.x_new += p.vx * dt;
             p.y_new += p.vy * dt ;           
-            pbc_posi(p);
+            pbc_position(p);
         }
     }
     void EndTimeStep(){
@@ -235,13 +277,15 @@ public:
     } 
     void integrate() {
         velocity_alignment(); 
+        compute_forces();
+        velocity_update();
         position_update(); 
         EndTimeStep();
     } 
     double velocity_order_parameter() {
         double sum_vx = 0, sum_vy = 0;
         
-        for ( auto& p : particles) {
+        for ( Particle & p : particles) {
             sum_vx += p.vx;
             sum_vy += p.vy;    
         }
@@ -252,29 +296,29 @@ public:
     void save_snapshot(int step,int trial) {
         ofstream file(folder_path+"config_data/trial_"+to_string(trial)+"/config_" +to_string(step) + ".csv");
         file<<"x,y,vx,vy\n";
-        for ( auto& p : particles) {
+        for ( Particle & p : particles) {
             file << p.x << "," << p.y << ","
                  << p.vx << "," << p.vy << "\n";
         }
         file.close();
     }   
 
-    void run_simulation(int tmax,int trialstart,int numberoftrials,vector<bool>time_record) {
+    void run_simulation(int tmax,int trialstart,vector<bool>time_record) {
         ofstream f(folder_path+"parameters.csv");
-        string head="N,Lx,Ly,alpha,v0,dt,eta,maxiter,numberoftrials\n";
+        string head="N,Lx,Ly,alpha,v0,dt,eta,maxiter,trial\n";
         f<< head;
-        f<<N<<","<<Lx<<","<<Ly<<","<<half_angle<<","<<v0<<","<<dt<<","<<noise<<","<<tmax<<","<<numberoftrials; 
+        f<<N<<","<<Lx<<","<<Ly<<","<<half_angle<<","<<v0<<","<<dt<<","<<noise<<","<<tmax<<","<<trial; 
         f.close();
         int time_counter=0;
-        for (int t = 0; t < tmax; t++) {
+        for (int t = 0; t < tmax; t++) { 
             integrate();
+            if(t%1000==0)update_neigbours();
             if (time_record[t]){
                 order.push_back(velocity_order_parameter());    
                 save_snapshot(t,trial);
                 times.push_back(t);
                 } 
             if (t % 100 == 0) cout  << t<<">>" << flush;
-            
         } 
         cout<<tmax<<"\n"; 
         save_order_data();
@@ -301,13 +345,13 @@ void save_order(vector<vector<double>>orderpara,vector<int>times,int trialstart,
 
 int main() {
     int N = 100;        // Number of particles
-    double Lx = 15.0;    // Box size
-    double Ly = 15.0;    // Box size
+    double Lx = 30.0;    // Box size
+    double Ly = 30.0;    // Box size
     double half_angle=M_PI;
     double v0=0.01;
     double dt = 0.01;   // Timestep
     double noise = 0.05; // Noise strength
-    int tmax = 10000;    // Maximum time
+    int tmax = 20000;    // Maximum time
     int numberoftrials=1;
     int trialstart=0;
     time_t trial_time,start_time=time(NULL) , finish_time;
@@ -333,7 +377,7 @@ int main() {
         cout<<"\n"<<"Trial number : "<<trial<< " Out of "<<numberoftrials<< " | Angle : "+to_string(half_angle*180/M_PI)+" | Noise : "+to_string(noise)+" | Density : "+to_string(N/(Lx*Ly))+" | N = "+to_string(N)<<" | "<<endl ;
         
         Simulation sim(N, half_angle,Lx,Ly,trial,v0,dt, noise,folder_path);
-        sim.run_simulation(tmax,trialstart,numberoftrials,time_record);
+        sim.run_simulation(tmax,trialstart,time_record);
         
         cout<<"Time to calculate trial = "  <<time(NULL)-trial_time<<" seconds ";  
         
