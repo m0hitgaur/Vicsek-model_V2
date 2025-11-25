@@ -138,7 +138,7 @@ public:
         update_neigbours();
     }          
     double dot_product(double theta,double dx,double dy,double rij){
-        return ( (cos(theta) * (dx))+( sin(theta) * (dy) ) )/(rij);
+        return ( (cos(theta) * (dx)) + (sin(theta) * (dy)) )/(rij);
     }
     void pbc_position(Particle & p){
         // Periodic boundary conditions
@@ -163,9 +163,9 @@ public:
         const double rmin = 1e-3;          
         if (r > rc || r < rmin) return 0.0;
         double sr  = sigma / r;
-        double sr6 = sr * sr * sr * sr * sr * sr;
+        double sr6 = pow(sr,6);
         double sr12 = sr6 * sr6;
-        return 24.0 * (2.0 * sr12 - sr6) / r;
+        return 24.0 * (sr6 - 2.0 * sr12 ) / r;
     }
     double inter_particle_repulsive_force(double r) {
         if (r <= 2*sigma ) return k*(2*sigma-r);
@@ -255,15 +255,15 @@ public:
     }
     void velocity_update(){
         for (Particle & p : particles) {    
-            p.vx_new += p.ax;
-            p.vy_new += p.ay ;
+            p.vx_new += p.ax*dt;
+            p.vy_new += p.ay *dt;
             pbc_velo(p);
         }
     }
     void position_update(){
         for (Particle & p : particles) {    
             p.x_new += p.vx * dt;
-            p.y_new += p.vy * dt ;           
+            p.y_new += p.vy * dt;           
             pbc_position(p);
         }
     }
@@ -277,7 +277,6 @@ public:
     } 
     void integrate() {
         velocity_alignment(); 
-        compute_forces();
         velocity_update();
         position_update(); 
         EndTimeStep();
@@ -311,6 +310,7 @@ public:
         f.close();
         int time_counter=0;
         for (int t = 0; t < tmax; t++) { 
+            compute_forces();
             integrate();
             if(t%1000==0)update_neigbours();
             if (time_record[t]){
