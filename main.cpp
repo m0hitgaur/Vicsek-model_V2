@@ -171,6 +171,7 @@ public:
     }   
     void velocity_alignment() {
     
+    void velocity_alignment() {    
         vector<double> avgx(N,0);
         vector<double> avgy(N,0),newtheta(N);
         vector<int> count(N,1); // starting from 1 as the particle itself is always counted
