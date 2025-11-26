@@ -285,7 +285,7 @@ public:
         double sum_vx = 0, sum_vy = 0;
         
         for ( Particle & p : particles) {
-            sum_vx += p.vx;
+            sum_vx += p.vx;         
             sum_vy += p.vy;    
         }
         
@@ -302,7 +302,7 @@ public:
         file.close();
     }   
 
-    void run_simulation(int tmax,int trialstart,vector<bool>time_record) {
+    void start_run(int tmax,int trialstart,vector<bool>time_record) {
         ofstream f(folder_path+"parameters.csv");
         string head="N,Lx,Ly,alpha,v0,dt,eta,maxiter,trial\n";
         f<< head;
@@ -345,8 +345,8 @@ void save_order(vector<vector<double>>orderpara,vector<int>times,int trialstart,
 
 int main() {
     int N = 100;        // Number of particles
-    double Lx = 30.0;    // Box size
-    double Ly = 30.0;    // Box size
+    double Lx = 15.0;    // Box size
+    double Ly = 15.0;    // Box size
     double half_angle=M_PI;
     double v0=0.01;
     double dt = 0.01;   // Timestep
@@ -377,7 +377,7 @@ int main() {
         cout<<"\n"<<"Trial number : "<<trial<< " Out of "<<numberoftrials<< " | Angle : "+to_string(half_angle*180/M_PI)+" | Noise : "+to_string(noise)+" | Density : "+to_string(N/(Lx*Ly))+" | N = "+to_string(N)<<" | "<<endl ;
         
         Simulation sim(N, half_angle,Lx,Ly,trial,v0,dt, noise,folder_path);
-        sim.run_simulation(tmax,trialstart,time_record);
+        sim.start_run(tmax,trialstart,time_record);
         
         cout<<"Time to calculate trial = "  <<time(NULL)-trial_time<<" seconds ";  
         
