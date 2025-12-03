@@ -4,3 +4,11 @@ data/*
 *.txt
 *.dat
 *.json
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.log
+*.csv
+*.zip
+*.tar.gz
