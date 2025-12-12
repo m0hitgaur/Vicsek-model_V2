@@ -3,9 +3,11 @@
 #include <cmath>
 #include <random>
 #include <fstream>
-#include <algorithm>
+#include <format>
 #include <thread>
 #include <filesystem>
+#include <iomanip>
+#include "locker.h"
 using namespace std;
 namespace fs = filesystem;
 
@@ -32,26 +34,33 @@ struct Particle {
 
 class Simulation {
 private:
+    const double half_angle;  // Half of the interaction angle in radians
+    const int N;              // Number of particles
+    const double Lx;          // Box size
+    const double Ly;          //  Box size
+    const double dt;          // Timestep
+    const double v0;          // Magnitude of velocity
+    const double noise;       // Noise strength
+    const double rc;          // Cutoff radius
+    const double sigma;       // Particle radius
+    const double k;           // Repulsion strength
+    const int trial;          // Trial number    
+    vector<int> times;        // Time points recorded
+    vector<double> order;     // Order parameter data
     vector<Particle> particles;
-    double half_angle;
-    int N;
-    double Lx; 
-    double Ly; 
-    double dt;
-    double v0;
-    double noise;  // Noise strength
-    double rc; // Cutoff radius
-    double sigma,k;
-    int trial;
-    vector<int> times;
-    vector<double> order;
-    mt19937 gen;
-    uniform_real_distribution<double> uniform_dist,uniform_dist_one;
+    mt19937 gen; 
+    uniform_real_distribution<double> rng_uniform_symm{-1.0, 1.0};
+    uniform_real_distribution<double> rng_uniform_one{0, 1};
+
     string folder_path;
 public:
-    Simulation(int num_particles,double angle,double box_size_x,double box_size_y,int trial_, double velo_mag,double timestep, double noise_strength,string folderpath)
-        : N(num_particles), half_angle(angle),Lx(box_size_x),Ly(box_size_y), dt(timestep), noise(noise_strength),
-           sigma(1.0), k(10.0),rc(3*sigma), uniform_dist(-1.0, 1.0),uniform_dist_one(0, 1),gen(12345),v0(velo_mag),folder_path(folderpath),trial(trial_){
+    Simulation(int num_particles,double angle, double noise_strength,double box_size_x,
+               double box_size_y,int sigma_input,double k_input,double velo_mag,double timestep,
+               string folderpath,int trial_input,int seed)
+             : N(num_particles), half_angle(angle),Lx(box_size_x),Ly(box_size_y), dt(timestep), noise(noise_strength),
+               sigma(sigma_input), k(k_input),rc(3*sigma_input),gen(seed),
+               v0(velo_mag),folder_path(folderpath),trial(trial_input){
+
         particles.resize(N);
         initialize_particles();
         
@@ -63,17 +72,16 @@ public:
         order_file.close();
 
     }
-
-    vector<double> get_order_data(){return order;}
-    vector<int> get_time_data(){return times;}
-    void update_neigbours(){
+    vector<double> get_order_data(){
+        return order;}
+    vector<int> get_time_data(){
+        return times;}
+    void update_neigbours(){       
         for(Particle &p:particles){
-            p.neighbours.clear();
+            p.neighbours.clear();            
             for(int i=0;i<N;i++){
                 double r=rij(p,particles[i]);
-                if(r<=2*rc && r>1e-4){
-                    p.neighbours.push_back(i);
-                }
+                if(r<=2*rc && r>1e-5) {p.neighbours.push_back(i);}
             }
         }
     }
@@ -90,7 +98,7 @@ public:
                 particles[i].x_new = j ;
                 particles[i].y_new = k;                    
                 
-                double theta=M_PI*uniform_dist(gen);
+                double theta=M_PI*rng_uniform_symm(gen);
     
                 particles[i].vx = v0*cos(theta);
                 particles[i].vy = v0*sin(theta);
@@ -104,8 +112,7 @@ public:
         update_neigbours();
         for(int t=0;t<100;t++){velocity_update();position_update();EndTimeStep();}
         update_neigbours();
-    }          
-
+    }                  
     void initialize_particles() {
         gen.seed(12345 + 10 * trial);
         double rho = N/(Lx*Ly);
@@ -122,7 +129,7 @@ public:
                 particles[i].x_new = particles[i].x;
                 particles[i].y_new = particles[i].y;
                 
-                double theta=M_PI*uniform_dist(gen);
+                double theta=M_PI*rng_uniform_symm(gen);
                 particles[i].vx = v0*cos(theta);
                 particles[i].vy = v0*sin(theta);
                 particles[i].vx_new = v0*cos(theta);
@@ -135,9 +142,9 @@ public:
                 i++;                
             } 
         }
-        //update_neigbours();
-        //for(int t=0;t<100;t++){velocity_update();position_update();EndTimeStep();}
-        //update_neigbours();
+        update_neigbours();
+        for(int t=0;t<1500;t++){velocity_update();position_update();EndTimeStep();}
+        update_neigbours();
     }          
     double dot_product(double theta,double dx,double dy,double rij){
         return ( (cos(theta) * (dx)) + (sin(theta) * (dy)) )/(rij);
@@ -162,7 +169,7 @@ public:
         p.vy_new=v0 *sin(theta);
     }
     double lennard_jones_force(double r) {
-        const double rmin = 1e-3;          
+        const double rmin = 1e-5;          
         if (r > rc || r < rmin) return 0.0;
         double sr  = sigma / r;
         double sr6 = pow(sr,6);
@@ -178,8 +185,8 @@ public:
         double dy = p_i.y - p_j.y;
         dx=minimum_image(dx,Lx);
         dy=minimum_image(dy,Ly);
-        double r=sqrt(dx*dx + dy*dy);
-        if (r < 1e-3) r = 1e-3;
+        double r=hypot(dx,dy);
+        if (r < 1e-5) r = 1e-5;
         return r;
     }
     
@@ -191,12 +198,12 @@ public:
         
         for (int i = 0; i < particles.size(); i++) {
             for (int j:particles[i].neighbours) {
-                if(j<=i)continue; // to avoid double counting;
+                if(j<=i)continue; // to avoid double counting
                 double dx = particles[j].x - particles[i].x;
                 double dy = particles[j].y - particles[i].y;
                 dx=minimum_image(dx,Lx);
                 dy=minimum_image(dy,Ly);
-                double r = sqrt(dx*dx + dy*dy);     
+                double r = hypot(dx,dy);     
             
                 double f = inter_particle_repulsive_force(r);
                 double fx = f * (-dx / r);
@@ -229,7 +236,7 @@ public:
                 double theta_j=atan2(particles[j].vy,particles[j].vx);
                 double dx=minimum_image(particles[j].x - particles[i].x,Lx);
                 double dy=minimum_image(particles[j].y - particles[i].y,Ly);                 
-                double rij = sqrt(pow(dx, 2) + pow(dy, 2));
+                double rij = hypot(dx,dy);
                 double innerproduct_i=  dot_product(theta_i,dx,dy,rij); 
                 double innerproduct_j=  dot_product(theta_j,-dx,-dy,rij); 
                         
@@ -248,7 +255,7 @@ public:
         {avgx[i] /= static_cast<double>(count[i]);
         avgy[i]/=static_cast<double>(count[i]);}
 
-        newtheta=atan2(avgy[i],avgx[i]) + (uniform_dist(gen))*(noise/2);
+        newtheta=atan2(avgy[i],avgx[i]) + (rng_uniform_symm(gen))*(noise/2);
         
         if(newtheta<-M_PI)newtheta= fmod(newtheta , M_PI)+M_PI;
         else if(newtheta>M_PI)newtheta= fmod(newtheta , M_PI)-M_PI;
@@ -272,6 +279,7 @@ public:
             pbc_position(p);
         }
     }
+
     void EndTimeStep(){
        for (Particle &p : particles) {
             p.vx = p.vx_new;
@@ -294,7 +302,7 @@ public:
             sum_vy += p.vy;    
         }
         
-        double va = sqrt(sum_vx*sum_vx + sum_vy*sum_vy ) /(v0* N);
+        double va = hypot(sum_vx,sum_vy) /(v0* N);
         return va;
     }   
     void save_snapshot(int step,int trial) {
@@ -316,27 +324,40 @@ public:
         f<< head;
         f<<N<<","<<Lx<<","<<Ly<<","<<half_angle<<","<<v0<<","<<dt<<","<<noise<<","<<tmax<<","<<trial; 
         f.close();
+        time_t timestarted=time(NULL);
         int time_counter=0;
         for (int t = 0; t < tmax; t++) { 
             compute_forces();
             integrate();
-            if(t%500==0)update_neigbours();
+            if(t%250==0)update_neigbours();
             if (time_record[t]){
                 order.push_back(velocity_order_parameter());    
                 save_snapshot(t,trial);
                 times.push_back(t);
                 } 
-            if (t % 100 == 0) cout  << t<<">>" << flush;
+            if (t % 500 == 0) print_progress(static_cast<float> (t)/static_cast<float> (tmax),static_cast<float>(timestarted));
         } 
-        cout<<tmax<<"\n"; 
+        print_progress(1.0,static_cast<float>(timestarted));
         save_order_data();
         cout << "\nSimulation complete. Recorded " << times.size() << " snapshots." << endl;
     }
 
 };
 
+vector<bool> calculate_time_to_record(int tmax){
+    vector<bool> time_record;
+    for (int t = 0; t < tmax; t++) {
+        bool should_record = false;
+            if (t <= 10) should_record = true;
+            if(t>=10 && t<100&& t%10==0) should_record = true;                   
+            if (t<1000 && t >= 100 && t % 50 == 0) should_record = true;   
+            if (t>=1000 && t % 100 == 0) should_record = true;                        
+            time_record.push_back(should_record);
+            }
+    
 
-
+    return time_record;
+}
 void save_order(vector<vector<double>>orderpara,vector<int>times,int trialstart,string folder_path){        
     ofstream order_file(folder_path+"order_parameter.csv");
     string a="";
@@ -351,29 +372,22 @@ void save_order(vector<vector<double>>orderpara,vector<int>times,int trialstart,
     order_file.close();
     }
 
-int main() {
-    int N = 100;        // Number of particles
-    double Lx = 30.0;    // Box size
-    double Ly = 30.0;    // Box size
-    double half_angle=M_PI;
-    double v0=0.01;
-    double dt = 0.01;   // Timestep
-    double noise = 0.05; // Noise strength
-    int tmax = 20000;    // Maximum time
-    int numberoftrials=1;
-    int trialstart=0;
+int main() { 
+    int N = 500;              // Number of particles
+    double Lx = 36.0;         // Box size
+    double Ly = 36.0;         // Box size
+    double half_angle=M_PI;   // Half of the vision angle in radians
+    double v0=1.0e0;          // Magnitude of velocity
+    double dt = 1.0e-3;       // Timestep
+    double noise = 0.05;      // Noise strength
+    int tmax = 2.0e4;         // Maximum time
+    int numberoftrials=1;     // Number of trials
+    int trialstart=0;         // Starting trial number 
+    double sigma=0.5;         // particle radius
+    double k=10.0;            // repulsion strength
+    int seed=12345;           // random seed
     time_t trial_time,start_time=time(NULL) , finish_time;
-    vector<bool> time_record;    
-    for (int t = 0; t < tmax; t++) {
-        bool should_record = false;
-            if (t <= 10) should_record = true;
-            if(t>=10 && t<100&& t%10==0) should_record = true;                   
-            if (t<1000 && t >= 100 && t % 50 == 0) should_record = true;   
-            if (t>=1000 && t % 100 == 0) should_record = true;                        
-            time_record.push_back(should_record);
-            }
-    
-    
+    vector<bool> time_record=calculate_time_to_record(tmax); 
     vector <vector<double>> order_data(numberoftrials-trialstart);
     vector<int> times;
     string folder_path="data/";
@@ -382,9 +396,9 @@ int main() {
     for(int trial=trialstart;trial<numberoftrials;trial++){
         create_directory(folder_path+"config_data/trial_"+ to_string(trial)+"/");
         trial_time=time(NULL);
-        cout<<"\n"<<"Trial number : "<<trial<< " Out of "<<numberoftrials<< " | Angle : "+to_string(half_angle*180/M_PI)+" | Noise : "+to_string(noise)+" | Density : "+to_string(N/(Lx*Ly))+" | N = "+to_string(N)<<" | "<<endl ;
+        cout<<"\n"<<"Trial number "<<trial<< " Out of "<<numberoftrials<< " || Angle : "<<fixed<<setprecision(2)<<(half_angle*180/M_PI)<<" | Noise : "<<noise<<" | Packing Fraction : "<<((M_PI*N*(sigma)*(sigma))/(Lx*Ly))<<" | N = "<<N<<" || "<<endl ;
         
-        Simulation sim(N, half_angle,Lx,Ly,trial,v0,dt, noise,folder_path);
+        Simulation sim(N,half_angle,noise,Lx,Ly,sigma,k,v0,dt,folder_path,trial,seed);
         sim.start_run(tmax,trialstart,time_record);
         
         cout<<"Time to calculate trial = "  <<time(NULL)-trial_time<<" seconds ";  

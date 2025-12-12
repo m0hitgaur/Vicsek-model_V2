@@ -34,6 +34,8 @@ def all_distances_one_frame(df, Lx, Ly):
     N   = len(pos)
     r_list = []
     for i, j in combinations(range(N), 2):
+        if i==j:
+            continue
         dx = pos[j, 0] - pos[i, 0]
         dy = pos[j, 1] - pos[i, 1]
         dx, dy = minimum_image(dx, dy, Lx, Ly)
@@ -90,5 +92,5 @@ if __name__ == "__main__":
     plt.ylabel("N(r_ij)")
     plt.title(f"Distribution of inter-particle distances  (trial {args.trial})")
     plt.tight_layout()
-    plt.savefig(args.png, dpi=200)
+    #plt.savefig(args.png, dpi=200)
     plt.show()

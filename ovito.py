@@ -19,7 +19,7 @@ def csv_to_xyz(csv_path, xyz_path):
     with csv_path.open(newline='') as fc, xyz_path.open('w') as fx:
         rows = list(csv.DictReader(fc))          # first line is header
         fx.write(f'{len(rows)}\n')
-        fx.write('Properties=id:I:1:pos:R:2:velo:R:2:species:S:1\n')
+        fx.write('Properties=id:I:1:pos:R:2:velo:R:2:species:S:1:radius:R:0.5\n')
         for i, r in enumerate(rows):
             x, y   = float(r['x']), float(r['y'])
             vx, vy = float(r['vx']), float(r['vy'])
