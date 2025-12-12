@@ -10,7 +10,7 @@ using namespace std;
 namespace fs = filesystem;
 
 
-bool create_directory(string& path) {
+bool create_directory(const string& path) {
     try {
         fs::create_directories(path);
         return fs::is_directory(path);
@@ -24,6 +24,7 @@ struct Particle {
     double x, y;
     double vx, vy;
     double ax, ay;
+    double theta_avg;
     double x_new,y_new;
     double vx_new,vy_new;
     vector <int> neighbours;
@@ -50,7 +51,7 @@ private:
 public:
     Simulation(int num_particles,double angle,double box_size_x,double box_size_y,int trial_, double velo_mag,double timestep, double noise_strength,string folderpath)
         : N(num_particles), half_angle(angle),Lx(box_size_x),Ly(box_size_y), dt(timestep), noise(noise_strength),
-           sigma(1.0), k(1.0),rc(3*sigma), uniform_dist(-1.0, 1.0),uniform_dist_one(0, 1),gen(12345),v0(velo_mag),folder_path(folderpath),trial(trial_){
+           sigma(1.0), k(10.0),rc(3*sigma), uniform_dist(-1.0, 1.0),uniform_dist_one(0, 1),gen(12345),v0(velo_mag),folder_path(folderpath),trial(trial_){
         particles.resize(N);
         initialize_particles();
         
@@ -130,22 +131,23 @@ public:
                 particles[i].ax = 0;
                 particles[i].ay = 0;
                 
+                particles[i].theta_avg = 0;
                 i++;                
             } 
         }
-        update_neigbours();
-        for(int t=0;t<100;t++){velocity_update();position_update();EndTimeStep();}
-        update_neigbours();
+        //update_neigbours();
+        //for(int t=0;t<100;t++){velocity_update();position_update();EndTimeStep();}
+        //update_neigbours();
     }          
     double dot_product(double theta,double dx,double dy,double rij){
         return ( (cos(theta) * (dx)) + (sin(theta) * (dy)) )/(rij);
     }
     void pbc_position(Particle & p){
         // Periodic boundary conditions
-        if (p.x < 0) p.x = fmod(p.x,Lx) +Lx;
-        if (p.x > Lx) p.x = fmod(p.x,Lx);
-        if (p.y < 0) p.y = fmod(p.y,Ly) +Ly;
-        if (p.y > Ly) p.y = fmod(p.y,Ly);
+        if (p.x_new < 0) p.x_new = fmod(p.x_new,Lx) +Lx;
+        if (p.x_new > Lx) p.x_new = fmod(p.x_new,Lx);
+        if (p.y_new < 0) p.y_new = fmod(p.y_new,Ly) +Ly;
+        if (p.y_new > Ly) p.y_new = fmod(p.y_new,Ly);
     }
     double minimum_image(double dx,double Lx){
         if(dx>Lx/2) dx=dx-Lx;
@@ -187,20 +189,21 @@ public:
             p.ay  = 0;
             }
         
-        for (Particle &p_i:particles) {
-            for (int j:p_i.neighbours) {
-                double dx = particles[j].x - p_i.x;
-                double dy = particles[j].y - p_i.y;
+        for (int i = 0; i < particles.size(); i++) {
+            for (int j:particles[i].neighbours) {
+                if(j<=i)continue; // to avoid double counting;
+                double dx = particles[j].x - particles[i].x;
+                double dy = particles[j].y - particles[i].y;
                 dx=minimum_image(dx,Lx);
                 dy=minimum_image(dy,Ly);
-                double r = sqrt(dx*dx + dy*dy );     
+                double r = sqrt(dx*dx + dy*dy);     
             
                 double f = inter_particle_repulsive_force(r);
                 double fx = f * (-dx / r);
                 double fy = f * (-dy / r);
                 
-                p_i.ax += fx;
-                p_i.ay += fy;
+                particles[i].ax += fx;
+                particles[i].ay += fy;
                 
                 particles[j].ax -= fx;
                 particles[j].ay -= fy;
@@ -212,7 +215,8 @@ public:
 
     void velocity_alignment() {    
         vector<double> avgx(N,0);
-        vector<double> avgy(N,0),newtheta(N);
+        vector<double> avgy(N,0);
+        double newtheta;
         vector<int> count(N,1); // starting from 1 as the particle itself is always counted
         
         for (int i=0;i<particles.size();i++) {
@@ -244,26 +248,27 @@ public:
         {avgx[i] /= static_cast<double>(count[i]);
         avgy[i]/=static_cast<double>(count[i]);}
 
-        newtheta[i] = atan2(avgy[i],avgx[i]) + (uniform_dist(gen))*(noise/2);
-        }
+        newtheta=atan2(avgy[i],avgx[i]) + (uniform_dist(gen))*(noise/2);
         
-        for(int i=0;i<particles.size();i++){
-            particles[i].vx_new = v0* cos(newtheta[i]) ;
-            particles[i].vy_new = v0*sin(newtheta[i]) ;
+        if(newtheta<-M_PI)newtheta= fmod(newtheta , M_PI)+M_PI;
+        else if(newtheta>M_PI)newtheta= fmod(newtheta , M_PI)-M_PI;
+        
+        particles[i].theta_avg = newtheta;
+        }
             
-        }    
     }
+
     void velocity_update(){
+        compute_forces();
         for (Particle & p : particles) {    
-            p.vx_new += p.ax*dt;
-            p.vy_new += p.ay *dt;
-            pbc_velo(p);
+            p.vx_new = p.ax + v0*cos(p.theta_avg);
+            p.vy_new = p.ay + v0*sin(p.theta_avg); 
         }
     }
     void position_update(){
         for (Particle & p : particles) {    
-            p.x_new += p.vx * dt;
-            p.y_new += p.vy * dt;           
+            p.x_new += p.vx * dt ;
+            p.y_new += p.vy * dt ;           
             pbc_position(p);
         }
     }
@@ -276,9 +281,9 @@ public:
             }         
     } 
     void integrate() {
-        velocity_alignment(); 
         velocity_update();
         position_update(); 
+        velocity_alignment(); 
         EndTimeStep();
     } 
     double velocity_order_parameter() {
@@ -294,11 +299,14 @@ public:
     }   
     void save_snapshot(int step,int trial) {
         ofstream file(folder_path+"config_data/trial_"+to_string(trial)+"/config_" +to_string(step) + ".csv");
+        ofstream file_2(folder_path+"config_data/trial_"+to_string(trial)+"/force_" +to_string(step) + ".csv");
         file<<"x,y,vx,vy\n";
         for ( Particle & p : particles) {
             file << p.x << "," << p.y << ","
                  << p.vx << "," << p.vy << "\n";
+            file_2<<p.ax<<","<<p.ay<<"\n";     
         }
+        
         file.close();
     }   
 
@@ -312,7 +320,7 @@ public:
         for (int t = 0; t < tmax; t++) { 
             compute_forces();
             integrate();
-            if(t%1000==0)update_neigbours();
+            if(t%500==0)update_neigbours();
             if (time_record[t]){
                 order.push_back(velocity_order_parameter());    
                 save_snapshot(t,trial);
@@ -345,8 +353,8 @@ void save_order(vector<vector<double>>orderpara,vector<int>times,int trialstart,
 
 int main() {
     int N = 100;        // Number of particles
-    double Lx = 15.0;    // Box size
-    double Ly = 15.0;    // Box size
+    double Lx = 30.0;    // Box size
+    double Ly = 30.0;    // Box size
     double half_angle=M_PI;
     double v0=0.01;
     double dt = 0.01;   // Timestep
