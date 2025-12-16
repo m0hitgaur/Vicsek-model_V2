@@ -18,7 +18,7 @@ bool create_directory(const string& path) {
         return fs::is_directory(path);
     } 
     catch (const fs::filesystem_error& e) {
-        std::cerr << "Error creating directory '" << path << "': " << e.what() << '\n';
+        cerr << "Error creating directory '" << path << "': " << e.what() << '\n';
         return false;
     }
 }
