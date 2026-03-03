@@ -112,12 +112,12 @@ public:
                 particles[i].ax = 0;
                 particles[i].ay = 0;
                 
-                particles[i].theta_avg = 0;
+                particles[i].theta_avg = theta;
                 i++;                
             } 
         }
         
-        for(int t=0;t<1500;t++){update_neigbours();integrate(M_PI,5.0);}
+        //for(int t=0;t<1500;t++){update_neigbours();integrate(M_PI,5.0);}
         
     }          
     double dot_product(double theta,double dx,double dy,double rij){
@@ -151,7 +151,7 @@ public:
         if (r <= 2*sigma ) return k*(r-2*sigma);
         else return 0;
     }   
-     double rij( Particle& p_i,  Particle& p_j) {
+    double rij( Particle& p_i,  Particle& p_j) {
         double dx = p_i.x - p_j.x;
         double dy = p_i.y - p_j.y;
         dx=minimum_image(dx,Lx);
@@ -222,13 +222,11 @@ public:
         vector<double> avgy(N,0);
         double newtheta;
         vector<int> count(N,1); // starting from 1 as the particle itself is always counted
-        compute_forces();
         for (int i=0;i<particles.size();i++) {
-            double theta_i=particles[i].theta_avg;   // just so that we can include the particle itself in average
+            double theta_i=particles[i].theta_avg;   
             avgy[i]+=sin(theta_i);   // just so that we can include the particle itself in average
-            
-            for (int j:particles[i].neighbours) 
-            {   
+            avgx[i]+=cos(theta_i);   // just so that we can include the particle itself in average
+            for (int j:particles[i].neighbours){   
                 double theta_j=atan2(particles[j].vy,particles[j].vx);
                 double dx=minimum_image(particles[j].x - particles[i].x,Lx);
                 double dy=minimum_image(particles[j].y - particles[i].y,Ly);                 
@@ -236,34 +234,39 @@ public:
                 double innerproduct_i=  dot_product(theta_i,dx,dy,rij); 
                 double innerproduct_j=  dot_product(theta_j,-dx,-dy,rij); 
                         
-                if(rij<rc && innerproduct_i >= cos(angle) )      
-                    {avgy[i]+= sin(theta_j);
-                    avgx[i]+=cos(theta_j);
-                    count[i]++;}
+                if(rij<rc && innerproduct_i >= cos(angle) ){
+                    avgy[i] += sin(theta_j);
+                    avgx[i] += cos(theta_j);
+                    count[i]++;
+                }
                 
-                if(rij<rc && innerproduct_j >= cos(angle) ) 
-                    {avgy[j]+= sin(theta_i);
+                if(rij<rc && innerproduct_j >= cos(angle) ){
+                    avgy[j]+= sin(theta_i);
                     avgx[j]+=cos(theta_i);
-                    count[j]++;}
+                    count[j]++;
+                }
             }
             
-        if(count[i]!=0)
-        {avgx[i] /= static_cast<double>(count[i]);
-        avgy[i]/=static_cast<double>(count[i]);}
-        
-        double totalforce_x=avgx[i] ;
-        double totalforce_y=avgy[i] ;
-        
-        newtheta=alpha*atan2(totalforce_y,totalforce_x) + (rng_uniform_symm(gen))*(eta/2);
-        
-        if(newtheta<-M_PI)newtheta= fmod(newtheta , M_PI)+M_PI;
-        else if(newtheta>M_PI)newtheta= fmod(newtheta , M_PI)-M_PI;
-        
-        particles[i].theta_avg = newtheta;
+            if(count[i]!=0)
+            {
+                avgx[i] /= static_cast<double>(count[i]);
+                avgy[i]/=static_cast<double>(count[i]);
+            }
+            
+            double totalforce_x=avgx[i] ;
+            double totalforce_y=avgy[i] ;
+            
+            newtheta=alpha*atan2(totalforce_y,totalforce_x) + (rng_uniform_symm(gen))*(eta/2);
+            
+            if(newtheta<-M_PI)newtheta= fmod(newtheta , M_PI)+M_PI;
+            else if(newtheta>M_PI)newtheta= fmod(newtheta , M_PI)-M_PI;
+            
+            particles[i].theta_avg = newtheta;
         }
             
-        }
+    }
     void velocity_update(){
+        compute_forces();
         for (Particle & p : particles) {    
             p.vx_new =  p.ax + v0* cos(p.theta_avg) ;
             p.vy_new =  p.ay + v0* sin(p.theta_avg) ; 
@@ -370,13 +373,13 @@ int main() {
     double Ly = 24;           // Box size
     double v0= 1.0e0;          // Magnitude of velocity
     double dt = 1.0e-3;       // Timestep
-    double noise=5.0e0 ;     // strength of noise
-    double half_angle=M_PI;   // Half of the vision angle  
+    double noise=1.0e-1 ;     // strength of noise
+    double half_angle=M_PI/2;   // Half of the vision angle  
     int tmax = 1.0e5;         // Maximum time
     int numberoftrials=1;     // Number of trials
     int trialstart=0;         // Starting trial number 
     double sigma=0.25;         // particle radius
-    double k=100.0;            // repulsion strength
+    double k=25;            // repulsion strength
     double alpha=1;          // alignment strength
     int seed=12345;           // random seed
     time_t trial_time,start_time=time(NULL) , finish_time;
