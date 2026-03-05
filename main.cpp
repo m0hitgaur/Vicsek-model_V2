@@ -63,7 +63,7 @@ public:
                double timestep,int trial_input,int tmax_input,int seed,double alpha_input)
                :N(num_particles), noise(noise_input),half_angle(angle),Lx(box_size_x),Ly(box_size_y), 
                dt(timestep),sigma(sigma_input), k(k_input),alpha(alpha_input),
-               rc(3*sigma_input),v0(velo_mag),trial(trial_input),tmax(tmax_input){
+               rc(2.5*sigma_input),v0(velo_mag),trial(trial_input),tmax(tmax_input){
         particles.resize(N);
         initialize_particles();
         initialize_time_to_record();
@@ -135,21 +135,24 @@ public:
         if(dx<-L/2) dx=dx+L ;  
         return dx;
     }
-    double lennard_jones_force(double r) {
-        const double rmin = 1e-5;     
-        const double omega=3.0;
-        if (r > rc || r < rmin) return 0.0;
-        r=abs(r-(0.3*sigma));  
-        double sr  = sigma / r;
-        double sr6 = pow(sr,2*omega);
-        double sr12 = pow(sr,4*omega);
-        
-        return 24.0 * (sr6 - 2.0 * sr12 ) / r;
+    double lennard_jones_force(double r) {    
+        const double n=6;
+        const double r_c=2*sigma;
+        const double r_a=0;//0.3*sigma;
+        // V(r)=k*((r0/rc)^2n -2*(r0/rc)^n)    
+        if (r <=r_c){ 
+        const double r_new= r+r_a;  
+        const double sr  =  sigma/r_new;
+        double ecut = 2*n*k* (pow(sigma/(r_c+r_a),2*n) - pow(sigma/(r_c+r_a),n)) / (r_c+r_a);
+        return        2*n*k* (pow(sr,2*n) - pow(sr,n)) / r  - ecut;
+        }
 
+        else return 0.0;
     }
     double inter_particle_repulsive_force(double r) {
+        //V(r)=0.5 * k * ( x^2 )
         if (r <= 2*sigma ) return k*(r-2*sigma);
-        else return 0;
+        else return 0.0;
     }   
     double rij( Particle& p_i,  Particle& p_j) {
         double dx = p_i.x - p_j.x;
@@ -168,14 +171,14 @@ public:
         
         for (int i = 0; i < particles.size(); i++) {
             for (int j:particles[i].neighbours) {
-                if(j<=i)continue; // to avoid double counting
+                if(j<=i)continue;                   // to avoid double counting
                 double dx = particles[i].x - particles[j].x;
                 double dy = particles[i].y - particles[j].y;
                 dx=minimum_image(dx,Lx);
                 dy=minimum_image(dy,Ly);
                 double r = hypot(dx,dy);     
             
-                double f = inter_particle_repulsive_force (r);
+                double f = lennard_jones_force (r);
                 double fx = f * (-dx / r);
                 double fy = f * (-dy / r);
                 
@@ -346,7 +349,7 @@ public:
         f.close();
         double timestarted=static_cast <double>(time(NULL));
         int time_counter=0;
-        int time_update_neighbours=static_cast<int>(1/(dt*4));
+        int time_update_neighbours=static_cast<int>(1/(dt*8));
         for (int t = 0; t < tmax; t++) { 
             integrate(half_angle,noise);
             if(t%time_update_neighbours==0)update_neigbours();
@@ -373,8 +376,8 @@ int main() {
     double Ly = 24;           // Box size
     double v0= 1.0e0;          // Magnitude of velocity
     double dt = 1.0e-3;       // Timestep
-    double noise=1.0e-1 ;     // strength of noise
-    double half_angle=M_PI/2;   // Half of the vision angle  
+    double noise=5.0e-1 ;     // strength of noise
+    double half_angle=M_PI;   // Half of the vision angle  
     int tmax = 1.0e5;         // Maximum time
     int numberoftrials=1;     // Number of trials
     int trialstart=0;         // Starting trial number 
